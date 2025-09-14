@@ -118,6 +118,28 @@ impl Hittable for Cube {
             }
         }
         
-        Some(HitRecord::new(point, hit_normal, t, ray, self.material.clone()))
+        // Calcula las coordenadas UV según la cara golpeada
+        let center = (self.min + self.max) * 0.5;
+        let local_point = point - center;
+        let half_size = (self.max - self.min) * 0.5;
+        
+        let (u, v) = if hit_normal.x.abs() > 0.5 {
+            // Cara X (izquierda o derecha)
+            let u = (local_point.z / half_size.z + 1.0) * 0.5;
+            let v = (local_point.y / half_size.y + 1.0) * 0.5;
+            (u, 1.0 - v)
+        } else if hit_normal.y.abs() > 0.5 {
+            // Cara Y (arriba o abajo) 
+            let u = (local_point.x / half_size.x + 1.0) * 0.5;
+            let v = (local_point.z / half_size.z + 1.0) * 0.5;
+            (u, 1.0 - v)
+        } else {
+            // Cara Z (frente o atrás)
+            let u = (local_point.x / half_size.x + 1.0) * 0.5;
+            let v = (local_point.y / half_size.y + 1.0) * 0.5;
+            (u, 1.0 - v)
+        };
+        
+        Some(HitRecord::new(point, hit_normal, t, ray, self.material.clone(), u, v))
     }
 }

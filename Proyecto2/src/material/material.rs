@@ -1,11 +1,12 @@
 // Sistema de materiales para raytracing
 
 use crate::math::Vec3;
+use crate::texture::Texture;
 
 #[derive(Debug, Clone)]
 pub struct Material {
-    // Color base del material (albedo)
-    pub color: Vec3,
+    // Textura del material 
+    pub texture: Texture,
     // Componente especular (0.0 = mate, 1.0 = muy especular)
     pub specular: f32,
     // Rugosidad del material (0.0 = espejo perfecto, 1.0 = completamente rugoso)
@@ -24,7 +25,7 @@ impl Material {
     // Crea un nuevo material con valores por defecto
     pub fn new() -> Self {
         Material {
-            color: Vec3::new(0.7, 0.7, 0.7),  
+            texture: Texture::solid_color(Vec3::new(0.7, 0.7, 0.7)),  
             specular: 0.1,
             roughness: 0.8,
             reflectivity: 0.0,
@@ -34,9 +35,15 @@ impl Material {
         }
     }
     
-    // Builder pattern para configurar el color
+    // Builder pattern para configurar el color (usando textura sólida)
     pub fn with_color(mut self, color: Vec3) -> Self {
-        self.color = color;
+        self.texture = Texture::solid_color(color);
+        self
+    }
+    
+    // Builder pattern para configurar textura directamente
+    pub fn with_texture(mut self, texture: Texture) -> Self {
+        self.texture = texture;
         self
     }
     
@@ -56,29 +63,6 @@ impl Material {
     pub fn with_reflectivity(mut self, reflectivity: f32) -> Self {
         self.reflectivity = reflectivity.clamp(0.0, 1.0);
         self
-    }
-    
-    // Builder pattern para configurar transparencia
-    pub fn with_transparency(mut self, transparency: f32) -> Self {
-        self.transparency = transparency.clamp(0.0, 1.0);
-        self
-    }
-    
-    // Builder pattern para configurar índice de refracción
-    pub fn with_refractive_index(mut self, refractive_index: f32) -> Self {
-        self.refractive_index = refractive_index.max(1.0);
-        self
-    }
-    
-    // Builder pattern para configurar emisión
-    pub fn with_emission(mut self, emission: Vec3) -> Self {
-        self.emission = emission;
-        self
-    }
-    
-    // Verifica si el material es emisivo
-    pub fn is_emissive(&self) -> bool {
-        self.emission.length_squared() > 0.0
     }
     
     // Obtiene el color de emisión

@@ -1,5 +1,4 @@
 // Módulo de geometría
-
 pub mod plane;
 pub mod cube;
 
@@ -22,11 +21,14 @@ pub struct HitRecord {
     pub front_face: bool,
     // Material del objeto golpeado
     pub material: Material,
+    // Coordenadas UV para mapeo de texturas (u=horizontal, v=vertical)
+    pub u: f32,
+    pub v: f32,
 }
 
 impl HitRecord {
     /// Crea un nuevo HitRecord
-    pub fn new(point: Vec3, normal: Vec3, t: f32, ray: &Ray, material: Material) -> Self {
+    pub fn new(point: Vec3, normal: Vec3, t: f32, ray: &Ray, material: Material, u: f32, v: f32) -> Self {
         let front_face = ray.direction.dot(&normal) < 0.0;
         let normal = if front_face { normal } else { -normal };
         
@@ -36,6 +38,8 @@ impl HitRecord {
             t,
             front_face,
             material,
+            u,
+            v,
         }
     }
 }

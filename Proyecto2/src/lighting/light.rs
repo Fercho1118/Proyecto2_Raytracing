@@ -10,14 +10,6 @@ pub struct Light {
     pub color: Vec3,
     // Intensidad de la luz 
     pub intensity: f32,
-    // Tipo de luz
-    pub light_type: LightType,
-}
-
-#[derive(Debug, Clone)]
-pub enum LightType {
-    // Luz puntual 
-    Point,
 }
 
 impl Light {
@@ -27,7 +19,6 @@ impl Light {
             position,
             color,
             intensity,
-            light_type: LightType::Point,
         }
     }
     

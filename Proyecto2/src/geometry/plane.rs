@@ -41,6 +41,12 @@ impl Hittable for Plane {
         
         let point = ray.at(t);
         
-        Some(HitRecord::new(point, self.normal, t, ray, self.material.clone()))
+        // Coordenadas UV básicas para el plano (repetir cada 2 unidades)
+        let u = (point.x * 0.5) % 1.0;
+        let v = (point.z * 0.5) % 1.0;
+        let u = if u < 0.0 { u + 1.0 } else { u };
+        let v = if v < 0.0 { v + 1.0 } else { v };
+        
+        Some(HitRecord::new(point, self.normal, t, ray, self.material.clone(), u, v))
     }
 }

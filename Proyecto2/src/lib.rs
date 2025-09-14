@@ -7,6 +7,7 @@ pub mod lighting;
 pub mod camera;
 pub mod scene;
 pub mod raytracer;
+pub mod texture;
 
 // Re-exportar las estructuras principales 
 pub use math::{Vec3, Ray};
@@ -16,6 +17,7 @@ pub use lighting::Light;
 pub use camera::Camera;
 pub use scene::Scene;
 pub use raytracer::Raytracer;
+pub use texture::Texture;
 
 // Constantes globales
 pub const EPSILON: f32 = 0.001;

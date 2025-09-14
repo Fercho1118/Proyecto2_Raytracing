@@ -100,4 +100,41 @@ impl Camera {
         let direction = (target_point - self.position).normalize();
         Ray::new(self.position, direction)
     }
+    
+    // Controles de cámara interactivos
+    
+    /// Rota la cámara alrededor del target usando delta del mouse
+    pub fn rotate_around_target(&mut self, delta_x: f32, delta_y: f32, sensitivity: f32) {
+        let distance = (self.position - self.target).length();
+        
+        // Calcular ángulos esféricos actuales
+        let direction = (self.position - self.target).normalize();
+        let theta = direction.z.atan2(direction.x); // Ángulo horizontal
+        let phi = direction.y.asin().clamp(-1.5, 1.5); // Ángulo vertical (limitar)
+        
+        // Aplicar rotación
+        let new_theta = theta - delta_x * sensitivity;
+        let new_phi = (phi + delta_y * sensitivity).clamp(-1.5, 1.5);
+        
+        // Convertir de vuelta a coordenadas cartesianas
+        let new_direction = Vec3::new(
+            new_phi.cos() * new_theta.cos(),
+            new_phi.sin(),
+            new_phi.cos() * new_theta.sin()
+        );
+        
+        // Nueva posición
+        self.position = self.target + new_direction * distance;
+        self.update_camera_vectors();
+    }
+    
+    /// Zoom (cambiar distancia al target)
+    pub fn zoom(&mut self, delta: f32, speed: f32) {
+        let direction = (self.position - self.target).normalize();
+        let current_distance = (self.position - self.target).length();
+        let new_distance = (current_distance - delta * speed).max(0.1); // Mínimo 0.1
+        
+        self.position = self.target + direction * new_distance;
+        self.update_camera_vectors();
+    }
 }

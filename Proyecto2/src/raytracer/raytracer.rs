@@ -29,6 +29,13 @@ impl Raytracer {
         println!("Renderizando {}x{} pixels", self.width, self.height);
         
         for y in 0..self.height {
+            // Mostrar progreso cada 50 líneas para menos overhead
+            if y % 50 == 0 {
+                let progress = (y as f32 / self.height as f32 * 100.0) as u32;
+                print!("\r{}%", progress);
+                use std::io::{self, Write};
+                io::stdout().flush().unwrap();
+            }
             for x in 0..self.width {
                 // Convierte coordenadas de pixel a coordenadas UV [0,1]
                 let u = x as f32 / (self.width - 1) as f32;
@@ -43,12 +50,9 @@ impl Raytracer {
                 // Convierte el color a formato Raylib
                 image[y as usize][x as usize] = vec3_to_color(color);
             }
-            
-            // Progress indicator cada 100 líneas
-            if y % 100 == 0 {
-                println!("Línea {} de {}", y, self.height);
-            }
         }
+        
+        println!("\nRenderizado completo!");
         
         println!("Renderizado completo!");
         image
@@ -78,7 +82,8 @@ impl Raytracer {
         color += hit.material.emitted();
         
         // Luz ambiental
-        color += scene.ambient_light * hit.material.color;
+        let surface_color = hit.material.texture.value(hit.u, hit.v);
+        color += scene.ambient_light * surface_color;
         
         // Contribución de todas las luces
         for (light, shadow_factor) in scene.get_lights_affecting_point(hit.point) {
@@ -87,7 +92,7 @@ impl Raytracer {
             
             // Componente difusa (Lambertian)
             let diffuse_strength = hit.normal.dot(&light_dir).max(0.0);
-            let diffuse = hit.material.color * light_color * diffuse_strength * shadow_factor;
+            let diffuse = surface_color * light_color * diffuse_strength * shadow_factor;
             color += diffuse;
             
             // Componente especular (Phong/Blinn-Phong)
@@ -131,11 +136,6 @@ impl Raytracer {
         
         // Clamp el color a [0,1]
         color.clamp(0.0, 1.0)
-    }
-    
-    // Establece la profundidad máxima de rayos
-    pub fn set_max_depth(&mut self, max_depth: i32) {
-        self.max_depth = max_depth.max(1);
     }
 }
 
