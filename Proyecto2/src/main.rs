@@ -13,7 +13,7 @@ mod texture;
 
 use math::Vec3;
 use material::Material;
-use geometry::{Plane, Cube};
+use geometry::{Cube};
 use lighting::Light;
 use camera::Camera;
 use scene::Scene;
@@ -163,52 +163,129 @@ fn create_test_scene() -> Scene {
     // Configurar color de fondo simple
     scene.set_background_color(Vec3::new(0.2, 0.3, 0.8));
     
-    // Agregar plano 
-    let floor_material = Material::new()
-        .with_color(Vec3::new(0.3, 0.7, 0.2))  
-        .with_roughness(0.9);
-    
-    scene.add_plane(Plane::new(
-        Vec3::new(0.0, -2.0, 0.0),    
-        Vec3::up(),                    
-        floor_material,
-    ));
 
-    // Cubo con textura de ladrillo real desde imagen
+    // === MATERIALES PARA DIORAMA ===
+    
+    // MATERIAL 1: LADRILLO
     let brick_texture = match Texture::from_file("assets/img/brick.jpg") {
         Ok(texture) => texture,
         Err(e) => {
-            println!("Error cargando textura: {}. Usando color sólido de respaldo.", e);
-            Texture::solid_color(Vec3::new(0.8, 0.4, 0.2)) // Color de respaldo
+            println!("Error cargando textura de ladrillo: {}. Usando color sólido de respaldo.", e);
+            Texture::solid_color(Vec3::new(0.8, 0.4, 0.2))
         }
     };
     let brick_material = Material::new()
         .with_texture(brick_texture)
         .with_roughness(0.7)                     
         .with_specular(0.2)                       
-        .with_reflectivity(0.05);                
+        .with_reflectivity(0.05);
     
+    // MATERIAL 2: MADERA
+    let wood_texture = match Texture::from_file("assets/img/wood.jpg") {
+        Ok(texture) => texture,
+        Err(e) => {
+            println!("Error cargando textura de madera: {}. Usando color sólido de respaldo.", e);
+            Texture::solid_color(Vec3::new(0.6, 0.4, 0.2))
+        }
+    };
+    let wood_material = Material::new()
+        .with_texture(wood_texture)
+        .with_specular(0.1)
+        .with_roughness(0.8)
+        .with_reflectivity(0.02);
+
+    // MATERIAL 3: PIEDRA/COBBLESTONE
+    let stone_texture = match Texture::from_file("assets/img/cobblestone.png") {
+        Ok(texture) => texture,
+        Err(e) => {
+            println!("Error cargando textura de piedra: {}. Usando color sólido de respaldo.", e);
+            Texture::solid_color(Vec3::new(0.5, 0.5, 0.5))
+        }
+    };
+    let stone_material = Material::new()
+        .with_texture(stone_texture)
+        .with_specular(0.05)
+        .with_roughness(0.9)
+        .with_reflectivity(0.01);
+
+    // MATERIAL 4: METAL CROMADO (ALTAMENTE REFLECTIVO)
+    let metal_material = Material::new()
+        .with_color(Vec3::new(0.8, 0.8, 0.9)) 
+        .with_specular(0.9)
+        .with_roughness(0.05)
+        .with_reflectivity(0.8); 
+
+    // MATERIAL 5: CRISTAL TRANSPARENTE (CON REFRACCIÓN)
+    let glass_material = Material::new()
+        .with_color(Vec3::new(0.95, 0.98, 1.0)) 
+        .with_specular(0.95)
+        .with_roughness(0.01)
+        .with_reflectivity(0.25)      
+        .with_transparency(0.6)      
+        .with_refractive_index(1.52); 
+
+    // === CREAR DIORAMA CON 5 CUBOS ===
+    
+    // Cubo de ladrillo (izquierda adelante)
     scene.add_cube(Cube::new(
-        Vec3::new(0.0, -0.5, -3.0),        
-        Vec3::new(1.5, 1.5, 1.5),          
+        Vec3::new(-2.5, -0.5, -2.0),
+        Vec3::new(1.5, 1.5, 1.5),
         brick_material,
     ));
-
-    // Luz principal intensa y posicionada para reflejos metálicos
-    scene.add_light(Light::new(
-        Vec3::new(-3.0, 5.0, 2.0),     
-        Vec3::new(1.0, 1.0, 0.9),      
-        1.5,                          
+    
+    // Cubo de madera (izquierda atrás)
+    scene.add_cube(Cube::new(
+        Vec3::new(-2.5, -0.5, -4.5),
+        Vec3::new(1.5, 1.5, 1.5),
+        wood_material,
+    ));
+    
+    // Cubo de piedra (centro)
+    scene.add_cube(Cube::new(
+        Vec3::new(0.0, -0.5, -3.0),
+        Vec3::new(1.5, 1.5, 1.5),
+        stone_material,
+    ));
+    
+    // Cubo de cristal (derecha adelante) 
+    scene.add_cube(Cube::new(
+        Vec3::new(2.5, -0.5, -2.0),
+        Vec3::new(1.5, 1.5, 1.5),
+        glass_material,
+    ));
+    
+    // Cubo metálico (derecha atrás) 
+    scene.add_cube(Cube::new(
+        Vec3::new(2.5, -0.5, -4.5),
+        Vec3::new(1.5, 1.5, 1.5),
+        metal_material,
     ));
 
-    // Segunda luz para crear mejor reflejo
+    // === ILUMINACIÓN MEJORADA PARA DIORAMA ===
+    
+    // Luz principal intensa para mostrar reflexiones metálicas
     scene.add_light(Light::new(
-        Vec3::new(3.0, 4.0, -2.0),     
-        Vec3::new(0.8, 0.9, 1.0),      
+        Vec3::new(-4.0, 6.0, 1.0),     
+        Vec3::new(1.0, 1.0, 0.95),     
+        2.0,                           
+    ));
+
+    // Segunda luz para crear efectos de refracción en cristal
+    scene.add_light(Light::new(
+        Vec3::new(4.0, 5.0, -1.0),     
+        Vec3::new(0.9, 0.95, 1.0),     
+        1.5,                           
+    ));
+    
+    // Tercera luz suave para iluminación general
+    scene.add_light(Light::new(
+        Vec3::new(0.0, 8.0, 2.0),      
+        Vec3::new(0.8, 0.8, 0.9),      
         0.8,                           
     ));
 
-    println!("Escena con cubo de ladrillo REAL (foto JPG) y 2 luces");
+    println!("Diorama con 5 materiales: Ladrillo, Madera, Piedra, Metal y Cristal");
+    println!("Escena creada con 3 luces para mejor iluminación");
     
     scene
 }

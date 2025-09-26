@@ -127,10 +127,19 @@ impl Raytracer {
             if let Some(refracted) = incident_ray.direction.refract(&hit.normal, refraction_ratio) {
                 let refraction_ray = Ray::new(hit.point - hit.normal * 0.001, refracted);
                 let refraction_color = self.ray_color(&refraction_ray, scene, depth - 1);
-                color += refraction_color * hit.material.transparency;
                 
-                // Reduce el color base por la transparencia
-                color *= 1.0 - hit.material.transparency;
+                // Mejor balance entre reflexión y refracción según el ángulo de Fresnel
+                let view_dir = (-incident_ray.direction).normalize();
+                let cos_theta = view_dir.dot(&hit.normal).abs();
+                let fresnel = 0.04 + (1.0 - 0.04) * (1.0 - cos_theta).powf(5.0); // Aproximación Schlick
+                
+                // Mezclar reflexión y refracción según Fresnel
+                let refraction_strength = hit.material.transparency * (1.0 - fresnel);
+                color += refraction_color * refraction_strength;
+                
+                // Solo reducir la componente difusa, no todo el color
+                let surface_component = surface_color * scene.ambient_light;
+                color = color - surface_component * hit.material.transparency + surface_component * (1.0 - hit.material.transparency);
             }
         }
         

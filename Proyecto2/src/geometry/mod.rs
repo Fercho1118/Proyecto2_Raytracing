@@ -1,8 +1,6 @@
 // Módulo de geometría
-pub mod plane;
 pub mod cube;
 
-pub use plane::Plane;
 pub use cube::Cube;
 
 use crate::math::{Vec3, Ray};

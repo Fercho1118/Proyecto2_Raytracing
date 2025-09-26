@@ -65,6 +65,18 @@ impl Material {
         self
     }
     
+    // Builder pattern para configurar transparencia
+    pub fn with_transparency(mut self, transparency: f32) -> Self {
+        self.transparency = transparency.clamp(0.0, 1.0);
+        self
+    }
+    
+    // Builder pattern para configurar índice de refracción
+    pub fn with_refractive_index(mut self, refractive_index: f32) -> Self {
+        self.refractive_index = refractive_index.max(1.0); 
+        self
+    }
+    
     // Obtiene el color de emisión
     pub fn emitted(&self) -> Vec3 {
         self.emission

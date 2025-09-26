@@ -12,13 +12,9 @@ pub mod texture;
 // Re-exportar las estructuras principales 
 pub use math::{Vec3, Ray};
 pub use material::Material;
-pub use geometry::{Plane, Cube, HitRecord};
+pub use geometry::{Cube, HitRecord};
 pub use lighting::Light;
 pub use camera::Camera;
 pub use scene::Scene;
 pub use raytracer::Raytracer;
 pub use texture::Texture;
-
-// Constantes globales
-pub const EPSILON: f32 = 0.001;
-pub const MAX_DEPTH: i32 = 5;
