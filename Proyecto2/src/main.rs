@@ -1,4 +1,4 @@
-// Punto de entrada del programa
+// Punto de entrada del programa optimizado
 
 use raylib::prelude::*;
 
@@ -10,6 +10,8 @@ mod camera;
 mod scene;
 mod raytracer;
 mod texture;
+mod framebuffer;
+mod adaptive_config;
 
 use math::Vec3;
 use material::Material;
@@ -19,66 +21,89 @@ use camera::Camera;
 use scene::Scene;
 use raytracer::Raytracer;
 use texture::Texture;
-
-// Constantes de la ventana
-const SCREEN_WIDTH: i32 = 800;
-const SCREEN_HEIGHT: i32 = 600;
+use framebuffer::Framebuffer;
+use adaptive_config::{RenderQuality, AdaptiveConfig};
 
 fn main() {
-    println!("Inicializando Raytracer...");
+    println!("Inicializando Raytracer Ultra-Optimizado con Rotación Automática...");
 
-    // Inicializar ventana
+    // Configuración adaptativa (modo performance por defecto)
+    let mut config = AdaptiveConfig::performance_mode();
+    let mut current_quality = config.quality;
+    
+    // Configurar Rayon con el número óptimo de threads
+    let num_threads = rayon::current_num_threads();
+    println!("⚡ Usando {} threads para paralelización", num_threads);
+    println!("🎮 Calidad: {}", current_quality.description());
+
+    // Usar dimensiones dinámicas basadas en la calidad
+    let (render_width, render_height) = current_quality.dimensions();
+    let (display_width, display_height) = (800, 600); // Ventana fija
+
+    // Inicializar ventana con tamaño fijo
     let (mut rl, thread) = raylib::init()
-        .size(SCREEN_WIDTH, SCREEN_HEIGHT)
-        .title("Raytracer - Proyecto 2")
+        .size(display_width, display_height)
+        .title("Raytracer Ultra-Optimizado - Rotación Auto")
         .build();
 
-    // Crear raytracer
-    let raytracer = Raytracer::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32);
+    // Crear raytracer con configuración adaptativa
+    let mut raytracer = Raytracer::with_config(&config);
 
-    // Crear escena de prueba
-    let scene = create_test_scene();
-    println!("Escena creada con {} luces", scene.lights.len());
+    // Crear escena optimizada con cubos más pequeños
+    let scene = create_optimized_scene();
+    println!("Escena optimizada creada con {} luces", scene.lights.len());
     
-    // Crear cámara
+    // Crear cámara optimizada para jacuzzi compacto
     let mut camera = Camera::new(
-        Vec3::new(0.0, 2.0, 5.0),      
-        Vec3::new(0.0, 0.0, -3.0),     
+        Vec3::new(-1.0, 1.5, 1.5),    // Más cercana para ver los cubos pequeños
+        Vec3::new(0.0, 0.0, 0.0),     // Mirando al centro del jacuzzi
         Vec3::up(),                     
-        45.0,                           
-        SCREEN_WIDTH as f32 / SCREEN_HEIGHT as f32, 
+        60.0,                         // FOV amplio para captar toda la escena compacta
+        display_width as f32 / display_height as f32, 
     );
 
-    // Variables para controles
+    // Variables de control mejoradas
     let mut needs_rerender = true;
-    let mut image_buffer = vec![vec![Color::BLACK; SCREEN_WIDTH as usize]; SCREEN_HEIGHT as usize];
-    let mouse_sensitivity = 0.005;
-    let zoom_speed = 2.0;
+    let mut image_buffer = vec![vec![Color::BLACK; display_width as usize]; display_height as usize];
+    let mouse_sensitivity = 0.003; // Más suave
+    let zoom_speed = 1.5;
     
-    // Variables para debounce (evitar renderizado constante)
+    // Variables para rotación automática
+    let mut auto_time: f32 = 0.0;
     let mut camera_change_timer = 0.0;
-    let camera_debounce_time = 0.3; // Esperar 0.3 segundos después del último cambio
-    let mut is_rendering = false;
+    let camera_debounce_time = 0.05;
+    let mut manual_control = false; // Si el usuario está controlando manualmente
+    let mut last_auto_rotation_time = 0.0; 
+    let mut rotation_counter = 0;
 
-    // Loop principal
+    // Framebuffer dinámico
+    let mut framebuffer = Framebuffer::new(render_width, render_height);
+
+    // Loop principal ultra-optimizado con rotación automática
     while !rl.window_should_close() {
         let frame_time = rl.get_frame_time();
+        auto_time += frame_time;
         
-        // Controles de cámara
+        // Control manual vs automático
         let mut camera_changed = false;
         
-        // Solo permitir controles si no está renderizando
-        if !is_rendering {
-            // Rotación con mouse (cuando se mantiene presionado el botón izquierdo)
-            if rl.is_mouse_button_down(MouseButton::MOUSE_BUTTON_LEFT) {
+        // Controles manuales (desactivan temporalmente la rotación automática)
+        if rl.is_mouse_button_down(MouseButton::MOUSE_BUTTON_LEFT) {
                 let mouse_delta = rl.get_mouse_delta();
-                if mouse_delta.x.abs() > 0.5 || mouse_delta.y.abs() > 0.5 {
+                if mouse_delta.x.abs() > 0.2 || mouse_delta.y.abs() > 0.2 {
                     camera.rotate_around_target(mouse_delta.x, -mouse_delta.y, mouse_sensitivity);
                     camera_changed = true;
+                    manual_control = true;
+                }
+            } else {
+                // Solo después de soltar el mouse, permitir rotación automática nuevamente
+                if manual_control {
+                    manual_control = false;
+                    auto_time = 0.0; // Reset para suavizar transición
                 }
             }
             
-            // Zoom con W/S o flechas arriba/abajo
+            // Zoom manual (siempre disponible)
             let mut zoom_delta = 0.0;
             if rl.is_key_down(KeyboardKey::KEY_W) || rl.is_key_down(KeyboardKey::KEY_UP) {
                 zoom_delta = 1.0;
@@ -87,205 +112,356 @@ fn main() {
                 zoom_delta = -1.0;
             }
             
-            // Zoom con rueda del mouse
             let wheel = rl.get_mouse_wheel_move();
-            if wheel.abs() > 0.1 {
-                zoom_delta = wheel * 3.0;
+            if wheel.abs() > 0.05 {
+                zoom_delta = wheel * 4.0; // Zoom más rápido
             }
             
-            if zoom_delta.abs() > 0.1 {
+            if zoom_delta.abs() > 0.05 {
                 camera.zoom(zoom_delta, zoom_speed * frame_time);
                 camera_changed = true;
             }
-        }
+
+            // Rotación automática más conservadora (solo si no hay control manual)
+            if config.enable_auto_rotation && !manual_control {
+                // Rotar solo cada 500ms para reducir carga de renderizado
+                if auto_time - last_auto_rotation_time > 0.5 { 
+                    let rotation_amount = config.rotation_speed * 0.5; // Rotación más lenta
+                    camera.rotate_around_target(rotation_amount, 0.0, 1.0);
+                    camera_changed = true;
+                    last_auto_rotation_time = auto_time;
+                    rotation_counter += 1;
+                    
+                    // Debug menos frecuente
+                    if rotation_counter % 5 == 0 {
+                        println!("Rotación automática: {} pasos", rotation_counter);
+                    }
+                    
+                    // Usar debounce normal para rotación automática
+                    camera_change_timer = camera_debounce_time;
+                }
+            }
+
+            // Cambios de calidad dinámicos
+            if rl.is_key_pressed(KeyboardKey::KEY_ONE) {
+                current_quality = RenderQuality::Low;
+                raytracer.set_quality(current_quality);
+                config.quality = current_quality;
+                let (new_w, new_h) = current_quality.dimensions();
+                framebuffer = Framebuffer::new(new_w, new_h);
+                camera_changed = true;
+                println!("Calidad: {}", current_quality.description());
+            }
+            if rl.is_key_pressed(KeyboardKey::KEY_TWO) {
+                current_quality = RenderQuality::Medium;
+                raytracer.set_quality(current_quality);
+                config.quality = current_quality;
+                let (new_w, new_h) = current_quality.dimensions();
+                framebuffer = Framebuffer::new(new_w, new_h);
+                camera_changed = true;
+                println!("Calidad: {}", current_quality.description());
+            }
+            if rl.is_key_pressed(KeyboardKey::KEY_THREE) {
+                current_quality = RenderQuality::High;
+                raytracer.set_quality(current_quality);
+                config.quality = current_quality;
+                let (new_w, new_h) = current_quality.dimensions();
+                framebuffer = Framebuffer::new(new_w, new_h);
+                camera_changed = true;
+                println!("Calidad: {}", current_quality.description());
+            }
+            
+            // Toggle rotación automática
+            if rl.is_key_pressed(KeyboardKey::KEY_R) {
+                config.enable_auto_rotation = !config.enable_auto_rotation;
+                println!("Rotación automática: {}", if config.enable_auto_rotation { "ON" } else { "OFF" });
+            }
         
-        // Sistema de debounce simplificado
+        // Sistema de debounce optimizado (más agresivo para rotación automática)
         if camera_changed {
-            camera_change_timer = camera_debounce_time; // Reiniciar timer
+            if manual_control {
+                camera_change_timer = camera_debounce_time; // Debounce normal para control manual
+            } else {
+                camera_change_timer = 0.0; // Sin debounce para rotación automática
+            }
         } else if camera_change_timer > 0.0 {
-            camera_change_timer -= frame_time; // Decrementar timer
+            camera_change_timer -= frame_time;
         }
         
-        // Re-renderizar cuando termine el timer o es el primer frame
+        // Renderizado ultra-optimizado con escalado dinámico
         if needs_rerender || (camera_change_timer <= 0.0 && camera_change_timer > -0.1) {
-            is_rendering = true;
-            println!("\nRenderizando...");
-            image_buffer = raytracer.render(&scene, &camera);
-            is_rendering = false;
+            // Menos verbose para rotación automática
+            if manual_control || needs_rerender {
+                println!("\nIniciando renderizado paralelo {} ({}x{})...", 
+                    current_quality.description(), raytracer.width, raytracer.height);
+            }
+            
+            // Renderizado directo al framebuffer apropiado
+            raytracer.render_to_framebuffer(&scene, &camera, &mut framebuffer);
+            
+            // Convertir y escalar al tamaño de ventana
+            image_buffer = scale_framebuffer_to_window(&framebuffer, display_width as u32, display_height as u32);
+            
             needs_rerender = false;
-            camera_change_timer = -1.0; // Marcar como completado
+            camera_change_timer = -1.0;
         }
 
+        // Dibujo optimizado con información mejorada
         let mut d = rl.begin_drawing(&thread);
-        d.clear_background(Color::BLACK);
+        d.clear_background(Color::new(15, 15, 25, 255)); // Fondo más elegante
 
-        // Dibujar la imagen renderizada
-        for y in 0..SCREEN_HEIGHT {
-            for x in 0..SCREEN_WIDTH {
+        // Dibujar imagen escalada
+        for y in 0..display_height {
+            for x in 0..display_width {
                 let pixel = image_buffer[y as usize][x as usize];
                 d.draw_pixel(x, y, pixel);
             }
         }
         
-        // UI simplificada - solo mostrar si está renderizando o controles básicos
-        if is_rendering {
-            // Mostrar estado de renderizado
-            d.draw_rectangle(0, 0, SCREEN_WIDTH, 80, Color::new(0, 0, 0, 200));
-            d.draw_text("Renderizando... Espera por favor", 10, 10, 24, Color::WHITE);
-            d.draw_text("(No muevas la cámara hasta que termine)", 10, 40, 18, Color::LIGHTGRAY);
+        // UI Ultra-mejorada con información completa
+        if camera_change_timer > 0.0 {
+            draw_waiting_ui(&mut d, camera_change_timer, camera_debounce_time);
+        } else if camera_change_timer > -0.1 {
+            draw_ready_ui(&mut d);
         } else {
-            // Controles activos
-            if camera_change_timer > 0.0 {
-                d.draw_rectangle(0, 0, 400, 80, Color::new(0, 0, 0, 150));
-                d.draw_text(&format!("⏱Esperando: {:.1}s", camera_change_timer), 10, 10, 18, Color::YELLOW);
-                d.draw_text("Puedes seguir moviendo la cámara...", 10, 35, 16, Color::LIGHTGRAY);
-                let progress = ((camera_debounce_time - camera_change_timer) / camera_debounce_time * 20.0) as i32;
-                let bar = "█".repeat(progress as usize) + &"░".repeat((20 - progress) as usize);
-                d.draw_text(&format!("[{}]", bar), 10, 55, 14, Color::GREEN);
-            } else if camera_change_timer > -0.1 {
-                d.draw_rectangle(0, 0, 200, 40, Color::new(0, 0, 0, 150));
-                d.draw_text("Listo para renderizar", 10, 10, 16, Color::GREEN);
-            } else {
-                // Controles normales
-                d.draw_rectangle(0, SCREEN_HEIGHT - 50, SCREEN_WIDTH, 50, Color::new(0, 0, 0, 100));
-                d.draw_text("Arrastra para rotar | W/S para zoom | ESC para salir", 10, SCREEN_HEIGHT - 35, 16, Color::WHITE);
-                d.draw_text(&format!(" Pos: ({:.1}, {:.1}, {:.1})", camera.position.x, camera.position.y, camera.position.z), 
-                          10, SCREEN_HEIGHT - 15, 14, Color::LIGHTGRAY);
-            }
+            draw_controls_ui(&mut d, &camera, &num_threads, &current_quality, &config, manual_control);
         }
     }
 }
 
-// Crea una escena simple con un solo cubo metálico
-fn create_test_scene() -> Scene {
+// Funciones auxiliares para UI simplificada
+fn draw_waiting_ui(d: &mut RaylibDrawHandle, _timer: f32, _total_time: f32) {
+    // Simplificado - sin barra de progreso
+    d.draw_rectangle(0, 0, 150, 40, Color::new(0, 0, 0, 150));
+    d.draw_text("Preparando...", 10, 10, 14, Color::ORANGE);
+}
+
+fn draw_ready_ui(d: &mut RaylibDrawHandle) {
+    // Mantener el mensaje de listo pero más pequeño
+    d.draw_rectangle(0, 0, 120, 30, Color::new(0, 0, 0, 100));
+    d.draw_text("Listo!", 10, 8, 14, Color::LIME);
+}
+
+fn draw_controls_ui(d: &mut RaylibDrawHandle, _camera: &Camera, _num_threads: &usize, _quality: &RenderQuality, config: &AdaptiveConfig, _manual: bool) {
+    let screen_height = d.get_screen_height();
+    
+    // UI súper simplificada - solo lo esencial en una línea
+    d.draw_rectangle(0, screen_height - 50, d.get_screen_width(), 50, Color::new(0, 0, 0, 120));
+    
+    // Solo controles básicos
+    d.draw_text("W/S para zoom | Scroll para zoom", 10, screen_height - 40, 14, Color::WHITE);
+    
+    // Estado de rotación automática (lo más importante)
+    let rotation_status = if config.enable_auto_rotation { 
+        "ROTACIÓN AUTOMÁTICA ACTIVA" 
+    } else { 
+        "Rotación OFF" 
+    };
+    let rotation_color = if config.enable_auto_rotation { Color::LIME } else { Color::DARKGRAY };
+    
+    d.draw_text(rotation_status, 10, screen_height - 22, 16, rotation_color);
+}
+
+// Función para escalar framebuffer al tamaño de ventana
+fn scale_framebuffer_to_window(framebuffer: &Framebuffer, target_width: u32, target_height: u32) -> Vec<Vec<raylib::prelude::Color>> {
+    let fb_buffer = framebuffer.to_raylib_buffer();
+    let fb_height = fb_buffer.len();
+    let fb_width = if fb_height > 0 { fb_buffer[0].len() } else { 0 };
+    
+    let mut scaled_buffer = Vec::with_capacity(target_height as usize);
+    
+    for y in 0..target_height {
+        let mut row = Vec::with_capacity(target_width as usize);
+        for x in 0..target_width {
+            // Mapeo bilinear simple
+            let fb_x = ((x as f32 / target_width as f32) * fb_width as f32) as usize;
+            let fb_y = ((y as f32 / target_height as f32) * fb_height as f32) as usize;
+            
+            let fb_x = fb_x.min(fb_width.saturating_sub(1));
+            let fb_y = fb_y.min(fb_height.saturating_sub(1));
+            
+            let pixel = fb_buffer[fb_y][fb_x];
+            row.push(pixel);
+        }
+        scaled_buffer.push(row);
+    }
+    
+    scaled_buffer
+}
+
+// Crea una escena ultra-optimizada estilo jacuzzi spa
+fn create_optimized_scene() -> Scene {
     let mut scene = Scene::new();
     
-    // Configurar color de fondo simple
-    scene.set_background_color(Vec3::new(0.2, 0.3, 0.8));
-    
+    // Color de fondo claro para resaltar el agua azul
+    scene.set_background_color(Vec3::new(0.8, 0.9, 0.95)); // Celeste muy claro
 
-    // === MATERIALES PARA DIORAMA ===
+    // === MATERIALES PARA JACUZZI REAL CON AGUA AZUL ===
     
-    // MATERIAL 1: LADRILLO
-    let brick_texture = match Texture::from_file("assets/img/brick.jpg") {
-        Ok(texture) => texture,
-        Err(e) => {
-            println!("Error cargando textura de ladrillo: {}. Usando color sólido de respaldo.", e);
-            Texture::solid_color(Vec3::new(0.8, 0.4, 0.2))
-        }
-    };
-    let brick_material = Material::new()
-        .with_texture(brick_texture)
-        .with_roughness(0.7)                     
-        .with_specular(0.2)                       
-        .with_reflectivity(0.05);
+    // AGUA AZUL VERDADERA (Color jacuzzi real)
+    let agua_material = Material::new()
+        .with_color(Vec3::new(0.1, 0.4, 0.8)) // AZUL INTENSO COMO AGUA REAL
+        .with_specular(0.8)
+        .with_roughness(0.1)
+        .with_reflectivity(0.3)      
+        .with_transparency(0.6)      // Semi-transparente para ver profundidad
+        .with_refractive_index(1.33); // Índice del agua real
     
-    // MATERIAL 2: MADERA
-    let wood_texture = match Texture::from_file("assets/img/wood.jpg") {
+    // MADERA DE SPA (Deck del jacuzzi)
+    let madera_texture = match Texture::from_file("assets/img/wood.jpg") {
         Ok(texture) => texture,
-        Err(e) => {
-            println!("Error cargando textura de madera: {}. Usando color sólido de respaldo.", e);
-            Texture::solid_color(Vec3::new(0.6, 0.4, 0.2))
-        }
+        Err(_) => Texture::solid_color(Vec3::new(0.65, 0.4, 0.25)) // Madera cálida
     };
-    let wood_material = Material::new()
-        .with_texture(wood_texture)
+    let madera_material = Material::new()
+        .with_texture(madera_texture)
         .with_specular(0.1)
-        .with_roughness(0.8)
-        .with_reflectivity(0.02);
+        .with_roughness(0.7)
+        .with_reflectivity(0.05);
 
-    // MATERIAL 3: PIEDRA/COBBLESTONE
-    let stone_texture = match Texture::from_file("assets/img/cobblestone.png") {
+    // MÁRMOL ELEGANTE (Piso del spa)
+    let marmol_material = Material::new()
+        .with_color(Vec3::new(0.9, 0.9, 0.85)) // Mármol blanco cálido
+        .with_specular(0.6)
+        .with_roughness(0.15)
+        .with_reflectivity(0.4); // Bien reflectivo como mármol real
+
+    // LADRILLO RÚSTICO (Paredes decorativas)
+    let ladrillo_texture = match Texture::from_file("assets/img/brick.jpg") {
         Ok(texture) => texture,
-        Err(e) => {
-            println!("Error cargando textura de piedra: {}. Usando color sólido de respaldo.", e);
-            Texture::solid_color(Vec3::new(0.5, 0.5, 0.5))
-        }
+        Err(_) => Texture::solid_color(Vec3::new(0.7, 0.35, 0.2))
     };
-    let stone_material = Material::new()
-        .with_texture(stone_texture)
+    let ladrillo_material = Material::new()
+        .with_texture(ladrillo_texture)
+        .with_roughness(0.8)
+        .with_specular(0.15)
+        .with_reflectivity(0.03);
+
+    // PIEDRA NATURAL (Elementos decorativos)
+    let piedra_texture = match Texture::from_file("assets/img/cobblestone.png") {
+        Ok(texture) => texture,
+        Err(_) => Texture::solid_color(Vec3::new(0.4, 0.4, 0.45))
+    };
+    let piedra_material = Material::new()
+        .with_texture(piedra_texture)
         .with_specular(0.05)
         .with_roughness(0.9)
-        .with_reflectivity(0.01);
+        .with_reflectivity(0.02);
 
-    // MATERIAL 4: METAL CROMADO (ALTAMENTE REFLECTIVO)
+    // METAL BRILLANTE (Elementos lujosos)
     let metal_material = Material::new()
-        .with_color(Vec3::new(0.8, 0.8, 0.9)) 
+        .with_color(Vec3::new(0.85, 0.85, 0.9)) // Acero inoxidable
         .with_specular(0.9)
         .with_roughness(0.05)
-        .with_reflectivity(0.8); 
+        .with_reflectivity(0.75);
 
-    // MATERIAL 5: CRISTAL TRANSPARENTE (CON REFRACCIÓN)
-    let glass_material = Material::new()
-        .with_color(Vec3::new(0.95, 0.98, 1.0)) 
-        .with_specular(0.95)
-        .with_roughness(0.01)
-        .with_reflectivity(0.25)      
-        .with_transparency(0.6)      
-        .with_refractive_index(1.52); 
-
-    // === CREAR DIORAMA CON 5 CUBOS ===
+    // === CONSTRUCCIÓN DE JACUZZI COMPACTO REAL ===
     
-    // Cubo de ladrillo (izquierda adelante)
+    // Cubos SÚPER PEQUEÑOS para ultra-performance y realismo
+    let mini_cube = Vec3::new(0.3, 0.3, 0.3);     // Extra pequeños
+    let small_cube = Vec3::new(0.4, 0.4, 0.4);    // Pequeños
+    
+    // JACUZZI CENTRAL - 4 cubos de AGUA AZUL PEGADOS (2x2)
+    // ¡COMPLETAMENTE PEGADOS SIN ESPACIO!
     scene.add_cube(Cube::new(
-        Vec3::new(-2.5, -0.5, -2.0),
-        Vec3::new(1.5, 1.5, 1.5),
-        brick_material,
+        Vec3::new(-0.15, 0.1, -0.15), // PEGADOS - separación de solo 0.3 
+        mini_cube,
+        agua_material.clone(),
     ));
-    
-    // Cubo de madera (izquierda atrás)
     scene.add_cube(Cube::new(
-        Vec3::new(-2.5, -0.5, -4.5),
-        Vec3::new(1.5, 1.5, 1.5),
-        wood_material,
+        Vec3::new(0.15, 0.1, -0.15),  // PEGADOS completamente
+        mini_cube,
+        agua_material.clone(),
     ));
-    
-    // Cubo de piedra (centro)
     scene.add_cube(Cube::new(
-        Vec3::new(0.0, -0.5, -3.0),
-        Vec3::new(1.5, 1.5, 1.5),
-        stone_material,
+        Vec3::new(-0.15, 0.1, 0.15),  // PEGADOS completamente
+        mini_cube,
+        agua_material.clone(),
     ));
-    
-    // Cubo de cristal (derecha adelante) 
     scene.add_cube(Cube::new(
-        Vec3::new(2.5, -0.5, -2.0),
-        Vec3::new(1.5, 1.5, 1.5),
-        glass_material,
-    ));
-    
-    // Cubo metálico (derecha atrás) 
-    scene.add_cube(Cube::new(
-        Vec3::new(2.5, -0.5, -4.5),
-        Vec3::new(1.5, 1.5, 1.5),
-        metal_material,
+        Vec3::new(0.15, 0.1, 0.15),   // PEGADOS completamente
+        mini_cube,
+        agua_material,
     ));
 
-    // === ILUMINACIÓN MEJORADA PARA DIORAMA ===
+    // DECK DE MADERA COMPACTO (Marco perfecto alrededor)
+    let deck_y = -0.1; // Justo debajo del agua
     
-    // Luz principal intensa para mostrar reflexiones metálicas
+    // Marco compacto de 3x3 con hueco en el centro (para el agua)
+    // Frente
+    scene.add_cube(Cube::new(Vec3::new(-0.5, deck_y, -0.5), small_cube, madera_material.clone()));
+    scene.add_cube(Cube::new(Vec3::new(0.0, deck_y, -0.5), small_cube, madera_material.clone()));
+    scene.add_cube(Cube::new(Vec3::new(0.5, deck_y, -0.5), small_cube, madera_material.clone()));
+    
+    // Lados (sin centro)
+    scene.add_cube(Cube::new(Vec3::new(-0.5, deck_y, 0.0), small_cube, madera_material.clone()));
+    scene.add_cube(Cube::new(Vec3::new(0.5, deck_y, 0.0), small_cube, madera_material.clone()));
+    
+    // Atrás
+    scene.add_cube(Cube::new(Vec3::new(-0.5, deck_y, 0.5), small_cube, madera_material.clone()));
+    scene.add_cube(Cube::new(Vec3::new(0.0, deck_y, 0.5), small_cube, madera_material.clone()));
+    scene.add_cube(Cube::new(Vec3::new(0.5, deck_y, 0.5), small_cube, madera_material));
+
+    // PISO DE MÁRMOL COMPACTO (5x5 grid alrededor del deck)
+    let piso_y = -0.3;
+    // Cuadrado 5x5 con el jacuzzi en el centro
+    for i in -2i32..=2i32 {
+        for j in -2i32..=2i32 {
+            // Saltar el área del deck (centro 3x3)
+            if i.abs() <= 1 && j.abs() <= 1 {
+                continue; // El deck ya ocupa esta área
+            }
+            scene.add_cube(Cube::new(
+                Vec3::new(i as f32 * 0.4, piso_y, j as f32 * 0.4), 
+                small_cube, 
+                marmol_material.clone()
+            ));
+        }
+    }
+
+    // ELEMENTOS DECORATIVOS MINIMALISTAS
+    // Torres pequeñas de ladrillo (esquinas exteriores)
+    scene.add_cube(Cube::new(Vec3::new(-1.2, 0.1, -1.2), mini_cube, ladrillo_material.clone()));
+    scene.add_cube(Cube::new(Vec3::new(1.2, 0.1, -1.2), mini_cube, ladrillo_material.clone()));
+    scene.add_cube(Cube::new(Vec3::new(-1.2, 0.1, 1.2), mini_cube, ladrillo_material.clone()));
+    scene.add_cube(Cube::new(Vec3::new(1.2, 0.1, 1.2), mini_cube, ladrillo_material));
+    
+    // Rocas decorativas pequeñas
+    scene.add_cube(Cube::new(Vec3::new(-1.0, -0.2, 0.0), mini_cube, piedra_material.clone()));
+    scene.add_cube(Cube::new(Vec3::new(1.0, -0.2, 0.0), mini_cube, piedra_material));
+    
+    // Accesorio metálico pequeño (como grifo o lámpara)
+    scene.add_cube(Cube::new(Vec3::new(0.0, 0.3, -0.8), mini_cube, metal_material));
+
+    // === ILUMINACIÓN TIPO SPA RELAJANTE ===
+    
+    // Luz principal cálida (simulando atardecer)
     scene.add_light(Light::new(
-        Vec3::new(-4.0, 6.0, 1.0),     
-        Vec3::new(1.0, 1.0, 0.95),     
-        2.0,                           
+        Vec3::new(-4.0, 6.0, -2.0),     
+        Vec3::new(1.0, 0.9, 0.8),       // Luz cálida dorada
+        2.2,                            
     ));
 
-    // Segunda luz para crear efectos de refracción en cristal
+    // Luz secundaria azulada (para resaltar el agua)
     scene.add_light(Light::new(
-        Vec3::new(4.0, 5.0, -1.0),     
-        Vec3::new(0.9, 0.95, 1.0),     
-        1.5,                           
-    ));
-    
-    // Tercera luz suave para iluminación general
-    scene.add_light(Light::new(
-        Vec3::new(0.0, 8.0, 2.0),      
-        Vec3::new(0.8, 0.8, 0.9),      
-        0.8,                           
+        Vec3::new(4.0, 4.0, 2.0),     
+        Vec3::new(0.8, 0.9, 1.0),       // Luz azul suave
+        1.8,                           
     ));
 
-    println!("Diorama con 5 materiales: Ladrillo, Madera, Piedra, Metal y Cristal");
-    println!("Escena creada con 3 luces para mejor iluminación");
+    // Luz ambiental suave desde arriba
+    scene.add_light(Light::new(
+        Vec3::new(0.0, 8.0, 0.0),      
+        Vec3::new(0.9, 0.9, 0.95),      // Luz neutra
+        1.2,                           
+    ));
+
+    println!("Escena SPA JACUZZI creada:");
+    println!("   Jacuzzi 2x2 con agua cristalina (refracción)");
+    println!("   Deck de madera natural");
+    println!("   Piso de mármol reflectivo");
+    println!("   Elementos decorativos (ladrillo + piedra + metal)");
+    println!("   Iluminación tipo spa (3 luces ambientales)");
+    println!("Optimizada para máximo rendimiento visual");
     
     scene
 }

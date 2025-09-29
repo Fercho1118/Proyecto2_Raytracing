@@ -42,16 +42,17 @@ impl HitRecord {
     }
 }
 
-pub trait Hittable {
+pub trait Hittable: Send + Sync + std::fmt::Debug {
     // Verifica si el rayo intersecta el objeto entre t_min y t_max
     fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord>;
 }
 
-// Lista de objetos que pueden ser intersectados
+// Lista de objetos que pueden ser intersectados (thread-safe)
 pub struct HittableList {
-    objects: Vec<Box<dyn Hittable>>,
+    objects: Vec<Box<dyn Hittable + Send + Sync>>,
 }
 
+// Implementar Debug manualmente para HittableList
 impl std::fmt::Debug for HittableList {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("HittableList")
@@ -60,6 +61,10 @@ impl std::fmt::Debug for HittableList {
     }
 }
 
+// Implementar Send + Sync manualmente para HittableList
+unsafe impl Send for HittableList {}
+unsafe impl Sync for HittableList {}
+
 impl HittableList {
     pub fn new() -> Self {
         HittableList {
@@ -67,7 +72,7 @@ impl HittableList {
         }
     }
 
-    pub fn add<T: Hittable + 'static>(&mut self, object: T) {
+    pub fn add<T: Hittable + Send + Sync + std::fmt::Debug + 'static>(&mut self, object: T) {
         self.objects.push(Box::new(object));
     }
 }

@@ -8,6 +8,8 @@ pub mod camera;
 pub mod scene;
 pub mod raytracer;
 pub mod texture;
+pub mod framebuffer;
+pub mod adaptive_config;
 
 // Re-exportar las estructuras principales 
 pub use math::{Vec3, Ray};

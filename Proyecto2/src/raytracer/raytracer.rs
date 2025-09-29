@@ -1,64 +1,79 @@
-// Motor de raytracing
+// Motor de raytracing optimizado con paralelización
 
 use crate::math::{Vec3, Ray};
 use crate::scene::Scene;
 use crate::camera::Camera;
 use crate::geometry::HitRecord;
-use raylib::prelude::*;
+use crate::framebuffer::Framebuffer;
+use crate::adaptive_config::{RenderQuality, AdaptiveConfig};
+use rayon::prelude::*;
 
 pub struct Raytracer {
     pub width: u32,
     pub height: u32,
     pub max_depth: i32,
+    pub quality: RenderQuality,
 }
 
 impl Raytracer {
-    // Crea un nuevo raytracer
-    pub fn new(width: u32, height: u32) -> Self {
+    // Crea un raytracer con configuración específica
+    pub fn with_config(config: &AdaptiveConfig) -> Self {
+        let (width, height) = config.quality.dimensions();
         Raytracer {
             width,
             height,
-            max_depth: 5,
+            max_depth: config.quality.max_depth(),
+            quality: config.quality,
         }
     }
     
-    // Renderiza la escena completa
-    pub fn render(&self, scene: &Scene, camera: &Camera) -> Vec<Vec<Color>> {
-        let mut image = vec![vec![Color::BLACK; self.width as usize]; self.height as usize];
+    // Actualiza la calidad dinámicamente
+    pub fn set_quality(&mut self, quality: RenderQuality) {
+        self.quality = quality;
+        let (width, height) = quality.dimensions();
+        self.width = width;
+        self.height = height;
+        self.max_depth = quality.max_depth();
+    }
+    
+    // Método para renderizado directo a framebuffer (más eficiente)
+    pub fn render_to_framebuffer(&self, scene: &Scene, camera: &Camera, framebuffer: &mut Framebuffer) {
+        println!("Renderizando {}x{} pixels directamente a framebuffer...", self.width, self.height);
         
-        println!("Renderizando {}x{} pixels", self.width, self.height);
+        let total_pixels = (self.width * self.height) as usize;
+        let mut pixel_data: Vec<Vec3> = vec![Vec3::zero(); total_pixels];
         
-        for y in 0..self.height {
-            // Mostrar progreso cada 50 líneas para menos overhead
-            if y % 50 == 0 {
-                let progress = (y as f32 / self.height as f32 * 100.0) as u32;
-                print!("\r{}%", progress);
-                use std::io::{self, Write};
-                io::stdout().flush().unwrap();
-            }
-            for x in 0..self.width {
-                // Convierte coordenadas de pixel a coordenadas UV [0,1]
+        // Renderizado paralelo
+        pixel_data
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(idx, pixel_color)| {
+                let y = idx / (self.width as usize);
+                let x = idx % (self.width as usize);
+                
                 let u = x as f32 / (self.width - 1) as f32;
-                let v = (self.height - 1 - y) as f32 / (self.height - 1) as f32; // Invertir Y
+                let v = (self.height - 1 - y as u32) as f32 / (self.height - 1) as f32;
                 
-                // Genera el rayo para este pixel
                 let ray = camera.get_ray(u, v);
+                *pixel_color = self.ray_color(&ray, scene, self.max_depth);
                 
-                // Calcula el color del pixel
-                let color = self.ray_color(&ray, scene, self.max_depth);
-                
-                // Convierte el color a formato Raylib
-                image[y as usize][x as usize] = vec3_to_color(color);
-            }
+                if idx % 20000 == 0 {
+                    let progress = (idx as f32 / total_pixels as f32 * 100.0) as u32;
+                    print!("\r{}%", progress);
+                    use std::io::{self, Write};
+                    let _ = io::stdout().flush();
+                }
+            });
+        
+        // Escribir al framebuffer
+        for (idx, &color) in pixel_data.iter().enumerate() {
+            let y = (idx / (self.width as usize)) as u32;
+            let x = (idx % (self.width as usize)) as u32;
+            framebuffer.set_pixel_from_vec3(x, y, color);
         }
         
-        println!("\nRenderizado completo!");
-        
-        println!("Renderizado completo!");
-        image
+        println!("\nRenderizado directo completo!");
     }
-    
-    // Calcula el color que debe tener un rayo
     fn ray_color(&self, ray: &Ray, scene: &Scene, depth: i32) -> Vec3 {
         // Si hemos alcanzado el límite de rebotes, no contribuye más luz
         if depth <= 0 {
@@ -74,7 +89,7 @@ impl Raytracer {
         }
     }
     
-    // Calcula la iluminación en un punto de intersección
+        // Calcula el color que debe tener un rayo (optimizado)
     fn calculate_lighting(&self, hit: &HitRecord, incident_ray: &Ray, scene: &Scene, depth: i32) -> Vec3 {
         let mut color = Vec3::zero();
         
@@ -146,14 +161,4 @@ impl Raytracer {
         // Clamp el color a [0,1]
         color.clamp(0.0, 1.0)
     }
-}
-
-// Convierte un Vec3 a Color de Raylib
-fn vec3_to_color(color: Vec3) -> Color {
-    Color::new(
-        (color.x.clamp(0.0, 1.0) * 255.0) as u8,
-        (color.y.clamp(0.0, 1.0) * 255.0) as u8,
-        (color.z.clamp(0.0, 1.0) * 255.0) as u8,
-        255,
-    )
 }
